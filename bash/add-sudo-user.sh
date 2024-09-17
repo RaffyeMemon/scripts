@@ -3,7 +3,7 @@
 set -u
 #author: Raffye.Memon (raffye.memon@technologywizz.com)
 #date: 03.03.23
-#description: Add user + add to sudo
+#description: Add user + add to sudo + add to visudo
 
 # Function to create the user
 create_user() {
@@ -37,6 +37,22 @@ add_public_key() {
     fi
 }
 
+# New function to add user to visudo
+add_to_visudo() {
+    read -p "Do you want to add $username to visudo with NOPASSWD privileges? (y/n): " add_to_visudo_choice
+    if [[ "$add_to_visudo_choice" =~ ^[Yy]$ ]]; then
+        echo "$username ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers.d/$username > /dev/null
+        if [ $? -eq 0 ]; then
+            echo "User $username added to visudo with NOPASSWD privileges."
+        else
+            echo "Failed to add $username to visudo."
+            exit 1
+        fi
+    else
+        echo "Skipped adding $username to visudo."
+    fi
+}
+
 # Prompt for the username
 read -p "Enter the username: " username
 
@@ -63,6 +79,9 @@ create_user
 
 # Add the user to the sudo group
 add_to_sudo_group
+
+# Add user to visudo if requested
+add_to_visudo
 
 # Prompt for a public key (optional)
 read -p "Enter the public key (or press Enter to skip): " public_key
