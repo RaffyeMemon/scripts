@@ -2,8 +2,8 @@
 #This option causes the bash shell to treat unset variables as an error and exit.
 set -u
 #author: Raffye.Memon (raffye.memon@technologywizz.com)
-#date: 03.03.23
-#description: Add user + add to sudo + add to visudo
+#date: 18-Sep-2024
+#description: Add user + add to sudo + add to visudo (with deferred execution)
 
 # Function to create the user
 create_user() {
@@ -13,7 +13,7 @@ create_user() {
         echo "User $username created successfully."
     else
         echo "Failed to create user $username."
-        exit 1
+        return 1
     fi
 }
 
@@ -24,7 +24,7 @@ add_to_sudo_group() {
         echo "User $username added to the sudo group."
     else
         echo "Failed to add $username to the sudo group."
-        exit 1
+        return 1
     fi
 }
 
@@ -37,21 +37,19 @@ add_public_key() {
     fi
 }
 
-# New function to add user to visudo
+# Function to add user to visudo
 add_to_visudo() {
-    read -p "Do you want to add $username to visudo with NOPASSWD privileges? (y/n): " add_to_visudo_choice
-    if [[ "$add_to_visudo_choice" =~ ^[Yy]$ ]]; then
-        echo "$username ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers.d/$username > /dev/null
-        if [ $? -eq 0 ]; then
-            echo "User $username added to visudo with NOPASSWD privileges."
-        else
-            echo "Failed to add $username to visudo."
-            exit 1
-        fi
+    echo "$username ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers.d/$username > /dev/null
+    if [ $? -eq 0 ]; then
+        echo "User $username added to visudo with NOPASSWD privileges."
     else
-        echo "Skipped adding $username to visudo."
+        echo "Failed to add $username to visudo."
+        return 1
     fi
 }
+
+# Main script execution starts here
+echo "Please provide the following information. No changes will be made until all inputs are collected."
 
 # Prompt for the username
 read -p "Enter the username: " username
@@ -70,21 +68,39 @@ echo
 
 # Check if the passwords match
 if [ "$password" != "$password_confirm" ]; then
-    echo "Passwords do not match. User not created."
+    echo "Passwords do not match. Aborting."
     exit 1
 fi
 
-# Create the user with the provided username, password, and set the shell to /bin/bash
-create_user
-
-# Add the user to the sudo group
-add_to_sudo_group
-
-# Add user to visudo if requested
-add_to_visudo
+# Prompt for visudo addition
+read -p "Do you want to add $username to visudo with NOPASSWD privileges? (y/n): " add_to_visudo_choice
 
 # Prompt for a public key (optional)
 read -p "Enter the public key (or press Enter to skip): " public_key
 
-# Add the public key (if provided)
-add_public_key
+# Review the collected information
+echo -e "\nPlease review the following information:"
+echo "Username: $username"
+echo "Password: [hidden]"
+echo "Add to visudo: $add_to_visudo_choice"
+echo "Public key: ${public_key:-None}"
+
+# Confirm execution
+read -p "Do you want to proceed with these changes? (y/n): " confirm
+
+if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    # Execute the changes
+    if create_user && add_to_sudo_group; then
+        if [[ "$add_to_visudo_choice" =~ ^[Yy]$ ]]; then
+            add_to_visudo || exit 1
+        fi
+        add_public_key
+        echo "All operations completed successfully."
+    else
+        echo "An error occurred. Some operations may not have completed."
+        exit 1
+    fi
+else
+    echo "Operation cancelled. No changes were made."
+    exit 0
+fi
